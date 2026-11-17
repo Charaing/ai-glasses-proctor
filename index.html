@@ -547,5 +547,86 @@ showIntro();
 requestAnimationFrame(frame);
 })();
 </script>
+<style>
+.cz-ov{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(8,12,10,.6);padding:16px}
+.cz-card{background:var(--paper);color:var(--ink);border-radius:4px;width:100%;max-width:340px;padding:18px 18px 16px;box-shadow:0 20px 60px rgba(0,0,0,.5);font-family:var(--f-body);font-size:13px;line-height:1.6}
+.cz-card h2{margin:0 0 6px;font-family:var(--f-display);font-size:20px;font-weight:400}
+.cz-card p{margin:0 0 10px}
+.cz-card a{color:var(--stamp)}
+.cz-card label.f{display:block;font-size:11px;color:#6b6b60;margin-top:8px}
+.cz-card input[type=text],.cz-card input[type=date],.cz-card input[type=password]{width:100%;font:inherit;font-size:15px;padding:6px 2px;border:0;border-bottom:1.5px solid var(--ink);background:transparent;color:var(--ink);border-radius:0}
+.cz-card .ck{display:flex;gap:8px;align-items:flex-start;margin:12px 0 4px;cursor:pointer}
+.cz-card .ck input{margin-top:4px}
+.cz-card .btn{width:100%;margin-top:10px;font-size:18px;padding:9px}
+.cz-card .err{color:var(--stamp);min-height:1.2em;font-size:12px;margin-top:6px}
+.cz-card .tiny{font-size:11px;color:#77776c;margin-top:8px}
+.cz-list{max-height:50vh;overflow:auto;margin-top:8px;border-top:1px solid #ccc4b0}
+.cz-list table{width:100%;border-collapse:collapse;font-size:12px}
+.cz-list td,.cz-list th{padding:5px 4px;border-bottom:1px solid #e0d9c8;text-align:left}
+</style>
+<script>
+(function(){
+  const API='https://consent-signs.suupeopiwosu.workers.dev';
+  const TERMS='https://charaing.github.io/consent-form/';
+  const KEY='consent_v20261117';
+  const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function modal(html){const o=document.createElement('div');o.className='cz-ov';o.innerHTML='<div class="cz-card">'+html+'</div>';document.body.appendChild(o);return o}
+
+  let done=false;try{done=!!localStorage.getItem(KEY)}catch(e){}
+  if(!done){
+    const o=modal(`<h2>이용약관 동의</h2>
+      <p>게임을 시작하려면 <a href="${TERMS}" target="_blank" rel="noopener">서비스 이용약관 및 동의서 (전문 보기)</a>에 동의해야 합니다.</p>
+      <label class="f" for="czName">성명</label><input id="czName" type="text" autocomplete="off" maxlength="30">
+      <label class="f" for="czBirth">생년월일</label><input id="czBirth" type="date">
+      <label class="ck"><input type="checkbox" id="czChk"><span>이용약관 전문(제1조~제24조, 제3장 당사자 간 특약 포함)을 읽고 동의합니다.</span></label>
+      <button class="btn" id="czGo" type="button">동의하고 시작</button>
+      <div class="err" id="czErr"></div>
+      <div class="tiny">입력한 성명·생년월일은 동의 기록으로 운영자에게 저장됩니다. (약관 제15조)</div>`);
+    o.querySelector('#czGo').onclick=async()=>{
+      const name=o.querySelector('#czName').value.trim(),birth=o.querySelector('#czBirth').value,err=o.querySelector('#czErr');
+      if(!o.querySelector('#czChk').checked)return err.textContent='약관에 동의해야 시작할 수 있습니다.';
+      if(!name)return err.textContent='성명을 입력하세요.';
+      if(!birth)return err.textContent='생년월일을 입력하세요.';
+      err.textContent='저장 중…';
+      try{
+        const r=await fetch(API+'/sign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,birth,terms:'v2026.11.17'})});
+        if(!r.ok)throw 0;
+      }catch(e){return err.textContent='저장에 실패했습니다. 잠시 후 다시 시도하세요.'}
+      try{localStorage.setItem(KEY,'1')}catch(e){}
+      o.remove();
+    };
+  }
+
+  // 시계 5번 탭 → 관리자 조회
+  const cv=document.getElementById('hall');let taps=[];
+  cv.addEventListener('pointerdown',e=>{
+    const r=cv.getBoundingClientRect(),x=(e.clientX-r.left)*1000/r.width,y=(e.clientY-r.top)*640/r.height;
+    if(Math.hypot(x-890,y-56)>42)return;
+    const now=Date.now();taps=taps.filter(t=>now-t<2500);taps.push(now);
+    if(taps.length>=5){taps=[];openAdmin()}
+  },true);
+
+  function openAdmin(){
+    const o=modal(`<h2>동의자 명부</h2>
+      <label class="f" for="czKey">관리자 비밀번호</label><input id="czKey" type="password" autocomplete="off">
+      <button class="btn" id="czLoad" type="button">조회</button>
+      <div class="err" id="czErr"></div><div class="cz-list" id="czList"></div>
+      <button class="btn" id="czClose" type="button" style="background:transparent;color:var(--ink);border:1px solid var(--ink);font-size:15px">닫기</button>`);
+    o.querySelector('#czClose').onclick=()=>o.remove();
+    o.querySelector('#czKey').focus();
+    o.querySelector('#czLoad').onclick=async()=>{
+      const err=o.querySelector('#czErr');err.textContent='불러오는 중…';
+      try{
+        const r=await fetch(API+'/list',{headers:{'X-Admin-Key':o.querySelector('#czKey').value}});
+        if(r.status===401)return err.textContent='비밀번호가 틀렸습니다.';
+        const d=await r.json();err.textContent='총 '+d.count+'명';
+        o.querySelector('#czList').innerHTML='<table><tr><th>성명</th><th>생년월일</th><th>동의 일시</th></tr>'+
+          d.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${esc(i.birth)}</td><td>${esc(new Date(i.at).toLocaleString('ko-KR'))}</td></tr>`).join('')+'</table>';
+      }catch(e){err.textContent='불러오기 실패'}
+    };
+  }
+})();
+</script>
+
 </body>
 </html>
