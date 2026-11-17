@@ -794,7 +794,8 @@ requestAnimationFrame(frame);
       <span class="cz-pwhat">이용약관 전문과 제3장 특약(엄창 무효, 30만 원 면제, 위약금 5만 원)에 동의</span>
       <span class="cz-pwhen">${esc(when(i.at))}</span></button></li>`).join('')+'</ul>';
     box.querySelectorAll('.cz-person').forEach(b=>b.onclick=()=>showPerson(o,items,+b.dataset.n));
-    o.querySelector('#czErr').textContent='총 '+items.length+'명이 동의했습니다. 이름을 누르면 동의서를 볼 수 있습니다.';
+    const info=o.querySelector('#czErr');info.style.color='var(--ink-2)';info.style.fontWeight='500';
+    info.textContent='총 '+items.length+'명이 동의했습니다. 이름을 누르면 동의서를 볼 수 있습니다.';
   }
   function showPerson(o,items,n){
     const i=items[n],[y,m,dd]=String(i.birth).split('-');
