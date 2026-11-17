@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>*,*::before,*::after{box-sizing:border-box}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}[hidden]{display:none!important}</style>
+<title>AI 안경 감독관</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Nanum+Myeongjo:wght@400;800&family=Noto+Sans+KR:wght@400;700&display=swap">
+<style>
+/* Layout: one exam-hall canvas under a slim proctor status strip; paper cards (지침서, 판결문) float over it */
+:root{
+  --hall:#151d19;
+  --board:#2d4636;
+  --chalk:#e9efe6;
+  --paper:#f4efe2;
+  --ink:#1e2320;
+  --stamp:#c8322b;
+  --ai:#2fd6d0;
+  --muted:#93a59a;
+  --f-display:"Do Hyeon","Noto Sans KR",system-ui,sans-serif;
+  --f-body:"Noto Sans KR",system-ui,sans-serif;
+  --f-court:"Nanum Myeongjo","Batang",serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{
+  background:var(--hall);color:var(--chalk);font-family:var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:14px;box-sizing:border-box;
+}
+.wrap{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;font-family:var(--f-display);font-size:20px}
+.bar .k{color:var(--muted);font-size:15px;margin-right:6px;letter-spacing:.04em}
+.bar .time{font-variant-numeric:tabular-nums}
+.bar .time.low{color:#ff8a7a}
+.bar .sp{flex:1}
+.iconbtn{font-family:var(--f-display);font-size:15px;background:transparent;color:var(--chalk);border:1px solid rgba(233,239,230,.3);border-radius:4px;padding:4px 10px;cursor:pointer}
+.iconbtn:focus-visible,.btn:focus-visible{outline:3px solid var(--ai);outline-offset:2px}
+.stage{position:relative;width:100%;max-width:100%;aspect-ratio:1000/640;border-radius:8px;overflow:hidden;background:var(--board);box-shadow:0 10px 40px rgba(0,0,0,.45)}
+.stage.shake{animation:shake .5s}
+@keyframes shake{20%{transform:translate(-8px,2px)}40%{transform:translate(7px,-3px)}60%{transform:translate(-5px,1px)}80%{transform:translate(4px,0)}}
+#hall{width:100%;height:100%;display:block;cursor:zoom-in;touch-action:manipulation}
+.note{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+.toast{position:absolute;left:50%;top:18%;transform:translate(-50%,0);background:var(--stamp);color:#fff;font-family:var(--f-display);font-size:22px;padding:8px 18px;border-radius:4px;pointer-events:none;opacity:0;transition:opacity .25s,transform .25s;white-space:nowrap;max-width:92%;overflow:hidden;text-overflow:ellipsis}
+.toast.on{opacity:1;transform:translate(-50%,-8px)}
+
+.overlay{position:fixed;inset:0;z-index:20;display:flex;overflow:auto;background:rgba(8,12,10,.74);
+  padding-block:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box}
+.card{margin:auto;background:var(--paper);color:var(--ink);border-radius:3px;padding:26px 28px;max-width:560px;width:100%;box-sizing:border-box;box-shadow:0 24px 70px rgba(0,0,0,.55);display:flex;flex-direction:column;gap:14px}
+.sheet-head{display:flex;justify-content:space-between;gap:10px;border-bottom:2px solid var(--ink);padding-bottom:8px;font-size:13px;font-weight:700;letter-spacing:.04em}
+.card h1,.card h2{font-family:var(--f-display);font-weight:400;margin:0;text-wrap:balance;line-height:1.1}
+.card h1{font-size:52px}
+.card h2{font-size:38px}
+.card p{margin:0;line-height:1.7;font-size:15px}
+.rules{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:15px;line-height:1.6}
+.clues{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:13px;border:1.5px solid var(--ink);border-radius:999px;padding:3px 10px}
+.chip.ai{border-color:#13807b;color:#0d6662}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font-family:var(--f-display);font-size:22px;background:var(--ink);color:var(--paper);border:0;border-radius:4px;padding:11px 22px;cursor:pointer}
+.btn.red{background:var(--stamp);color:#fff}
+.btn.ghost{background:transparent;color:inherit;border:1.5px solid currentColor}
+.sign{align-self:flex-end;font-size:13px;color:#5d625e}
+.tip{background:#e7e0cd;border-left:4px solid var(--ink);padding:10px 14px;font-size:14px;line-height:1.7}
+.big{font-family:var(--f-display);font-size:64px;line-height:1}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{border:1.5px solid var(--ink);padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.stat b{font-family:var(--f-display);font-weight:400;font-size:30px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;letter-spacing:.04em}
+
+.zoomcard{margin:auto;background:#0f1513;color:var(--chalk);border:1px solid rgba(233,239,230,.15);border-radius:8px;padding:14px;max-width:560px;width:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:10px}
+.zoomcard .zh{display:flex;justify-content:space-between;gap:10px;font-family:var(--f-display);font-size:20px}
+.zoomcard .zh .time{font-variant-numeric:tabular-nums}
+#zoomcv{width:100%;max-width:100%;aspect-ratio:520/380;display:block;border-radius:4px;background:#cfc6b2}
+.zoomcard .row .btn{flex:1;min-width:140px}
+.zoomcard .hint{font-size:12px;color:var(--muted);margin:0;line-height:1.5}
+
+/* endings */
+.jail{background:repeating-linear-gradient(90deg,rgba(6,8,10,.93) 0 54px,#454b52 54px 62px,#2b3036 62px 66px)}
+.verdict{font-family:var(--f-court);background:#fbf9f2;gap:12px;position:relative}
+.verdict .court{text-align:center;font-size:14px;letter-spacing:.3em}
+.verdict h2{font-family:var(--f-court);font-weight:800;text-align:center;font-size:34px;letter-spacing:.6em;padding-left:.6em}
+.verdict dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:14px}
+.verdict dt{font-weight:800}
+.verdict dd{margin:0}
+.verdict h3{margin:4px 0 0;font-size:15px;font-weight:800;letter-spacing:.5em;text-align:center}
+.verdict .sentence{font-size:20px;font-weight:800;text-align:center;line-height:1.6}
+.verdict p{font-size:14px;line-height:1.9}
+.seal{position:absolute;right:26px;bottom:84px;width:62px;height:62px;border:3px solid var(--stamp);color:var(--stamp);border-radius:6px;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:14px;line-height:1.2;transform:rotate(-8deg);opacity:.85}
+.ending-tag{font-family:var(--f-display);font-size:16px;letter-spacing:.12em;color:var(--stamp)}
+.quote{font-family:var(--f-body);font-size:14px;background:#ece6d6;padding:10px 14px;border-radius:3px}
+.fine{font-size:11px;color:#6b6e69;font-family:var(--f-body)}
+@media (max-width:520px){
+  .card{padding:20px 18px}
+  .card h1{font-size:40px}
+  .big{font-size:48px}
+  .stat b{font-size:24px}
+  .seal{right:14px;bottom:120px;width:52px;height:52px;font-size:12px}
+}
+@media (prefers-reduced-motion:reduce){.stage.shake{animation:none}.toast{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="bar" aria-live="polite">
+    <span><span class="k">교시</span><span id="bPeriod">1교시 국어</span></span>
+    <span><span class="k">남은 시간</span><span id="bTime" class="time">1:00</span></span>
+    <span><span class="k">적발</span><span id="bCaught">0 / 2</span></span>
+    <span><span class="k">점수</span><span id="bScore">0</span></span>
+    <span class="sp"></span>
+    <button class="iconbtn" id="muteBtn" type="button">소리 켜짐</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="hall" aria-label="시험장. 학생을 눌러 확대 관찰"></canvas>
+    <div class="toast" id="toast"></div>
+  </div>
+  <p class="note" id="note">학생을 누르면 확대해서 관찰합니다.</p>
+</div>
+
+<div class="overlay" id="ov"></div>
+
+<div class="overlay" id="zoomOv" hidden>
+  <div class="zoomcard" role="dialog" aria-labelledby="zTitle">
+    <div class="zh"><span id="zTitle">수험번호 01번 관찰 중</span><span class="time" id="zTime">1:00</span></div>
+    <canvas id="zoomcv"></canvas>
+    <p class="hint" id="zHint">렌즈와 눈동자를 잘 보세요. 관찰 중에도 시간은 흐릅니다.</p>
+    <div class="row">
+      <button class="btn red" id="accuseBtn" type="button">AI 안경 적발</button>
+      <button class="btn ghost" id="closeBtn" type="button">아닌 것 같다, 돌아가기</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(()=>{
+const W=1000,H=640,ZW=520,ZH=380,TAU=Math.PI*2,K=1.3;
+const $=id=>document.getElementById(id);
+const cv=$('hall'),c=cv.getContext('2d'),zcv=$('zoomcv'),zc=zcv.getContext('2d');
+(function fit(){const d=Math.min(2,window.devicePixelRatio||1);cv.width=W*d;cv.height=H*d;c.setTransform(d,0,0,d,0,0);zcv.width=ZW*d;zcv.height=ZH*d;zc.setTransform(d,0,0,d,0,0);})();
+
+const rand=(a,b)=>a+Math.random()*(b-a);
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+
+const LEVELS=[
+ {name:'1교시 국어',subj:'국어',time:60,ai:2,decoys:{glare:2,clock:2,mumble:1},led:1,dot:true,cyan:false,write:[2,4],read:[1.6,2.4],
+  tip:'구형 AI 안경입니다. 정답을 읽을 때 오른쪽 안경다리의 <b>파란 LED</b>가 깜빡이고 눈동자가 <b>좌우로 훑습니다</b>. 확대하면 왼쪽 경첩에 <b>작은 카메라 렌즈</b>가 보입니다. 창문 햇빛이 렌즈에 비치는 하얀 반사에 속지 마세요.',
+  note:'단서: 파란 LED, 좌우로 훑는 눈, 속삭임, 확대 시 경첩 카메라와 렌즈에 비친 글자'},
+ {name:'2교시 수학',subj:'수학',time:60,ai:3,decoys:{glare:3,clock:2,mumble:2},led:.45,dot:false,cyan:false,write:[2.5,4.5],read:[1.4,2.2],
+  tip:'신형이 들어왔습니다. LED는 절반쯤 꺼져 있습니다. 이번 교실 안경은 전부 <b>경첩에 검은 장식 나사</b>가 있어서 카메라로는 구분이 안 됩니다. 확대한 채로 기다리면 정답을 읽는 순간 <b>렌즈에 거울 글씨</b>가 비칩니다.',
+  note:'단서: 가끔 켜지는 LED, 좌우로 훑는 눈, 속삭임, 읽고 나서 빨라지는 필기, 렌즈의 거울 글씨'},
+ {name:'3교시 영어',subj:'영어',time:75,ai:4,decoys:{glare:3,clock:2,mumble:2,nervous:3},led:0,dot:false,cyan:true,write:[3,5],read:[1.2,1.8],
+  tip:'최신형은 <b>LED가 없습니다</b>. 블루라이트 코팅이 하늘색으로 번쩍이는 학생, 고민하며 눈을 굴리는 학생이 섞여 있습니다. 정답을 읽는 눈은 <b>정면에서 한 줄씩 훑고</b>, 고민하는 눈은 <b>위쪽을 헤맵니다</b>. 확실할 때만 잡으세요.',
+  note:'단서: 정면에서 한 줄씩 훑는 눈(위를 보면 고민 중), 속삭임, 갑자기 빨라지는 필기, 렌즈의 거울 글씨'}
+];
+const SKIN=['#f2d0b1','#e8bd98','#d9a77f','#f5dcc6','#e2b48c'];
+const HAIR=['#1d1a19','#2b2220','#3a2a1f','#4a3526','#14141a'];
+const SHIRT=['#2f3e5c','#3b4a3f','#5a3340','#e4e4e8','#41485a','#6a5a43'];
+const FRAMEC=['#151515','#5b3b23','#8a8f98','#a87d1e','#232b48','#6b1f2a'];
+const FRAMES=['round','square','thick'];
+const BRANDS=['커닝렌즈 X1','정답보기 Pro','슈퍼수능 아이','몰래보기 S2','치트비전 미니','올킬글라스 3'];
+const ANS=['①','②','③','④','⑤'];
+
+let state='intro',lv=0,L=LEVELS[0],students=[],timeLeft=L.time,t=0,score=0,totalMissed=0,totalCaught=0,caughtThis=0;
+let zoomS=null,hoverS=null,suedS=null,suedT=0,lastTick=0,muted=false,ending=false;
+
+/* ---------- sound ---------- */
+let actx=null;
+function ac(){if(!actx){try{actx=new (window.AudioContext||window.webkitAudioContext)()}catch(e){actx=null}}return actx}
+function beep(f,d,type,v,f2){if(muted)return;const a=ac();if(!a)return;try{const o=a.createOscillator(),g=a.createGain();o.type=type||'sine';o.frequency.setValueAtTime(f,a.currentTime);if(f2)o.frequency.exponentialRampToValueAtTime(f2,a.currentTime+d);g.gain.setValueAtTime(v||.06,a.currentTime);g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+d);o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+d+.03)}catch(e){}}
+const sBell=()=>{beep(660,.7,'triangle',.09);setTimeout(()=>beep(880,.9,'triangle',.09),260)};
+const sCatch=()=>{beep(523,.12,'square',.04);setTimeout(()=>beep(784,.12,'square',.04),90);setTimeout(()=>beep(1046,.25,'square',.04),180)};
+const sWrong=()=>{beep(150,.8,'sawtooth',.09,60);setTimeout(()=>beep(110,.9,'sawtooth',.08,50),300)};
+
+/* ---------- students ---------- */
+function makeStudents(){
+  students=[];
+  for(let i=0;i<20;i++){
+    const col=i%5,row=Math.floor(i/5);
+    students.push({num:i+1,x:100+col*200,y:172+row*118,skin:pick(SKIN),hair:pick(HAIR),hs:Math.floor(Math.random()*4),shirt:pick(SHIRT),
+      frame:pick(FRAMES),fc:pick(FRAMEC),isAI:false,decoy:'none',mode:'write',modeT:rand(.3,4),px:0,py:.85,tx:0,ty:.85,
+      blinkT:rand(1,5),blink:0,pen:Math.random()*5,penBoost:0,glareT:rand(1,6),glare:0,glareColor:'255,255,255',
+      ledOn:false,caught:false,revealed:false,seed:Math.random()*10,brand:'',hud:[],stand:0,talk:false});
+  }
+  const idx=shuffle([...Array(20).keys()]);let p=0;
+  for(let i=0;i<L.ai;i++){const s=students[idx[p++]];s.isAI=true;s.brand=pick(BRANDS);s.modeT=rand(.4,3)}
+  for(const [k,n] of Object.entries(L.decoys))for(let i=0;i<n;i++){const s=students[idx[p++]];s.decoy=k;if(k==='glare'&&L.cyan&&Math.random()<.7)s.glareColor='140,235,255'}
+}
+function nextMode(s){
+  if(s.isAI){
+    if(s.mode==='read'){s.mode='write';s.modeT=rand(...L.write);s.penBoost=1.3}
+    else{s.mode='read';s.modeT=rand(...L.read);s.ledOn=Math.random()<L.led;let q=Math.floor(rand(1,40));s.hud=[0,1,2,3,4,5].map(i=>(q+i)+'번 '+pick(ANS))}
+    return;
+  }
+  const busy=s.decoy==='mumble'||s.decoy==='nervous'||s.decoy==='clock';
+  if(s.mode==='write'){
+    s.mode='think';s.modeT=busy?rand(1.1,2.2):rand(.8,2);
+    if(s.decoy==='clock'){s.tx=Math.random()<.5?-.95:.95;s.ty=-.35}else{s.tx=rand(-.6,.6);s.ty=-.85}
+  }else{s.mode='write';s.modeT=busy?rand(1.6,3.6):rand(2.5,6.5)}
+}
+function update(dt){
+  t+=dt;
+  if(state==='play'||state==='zoom'){
+    timeLeft-=dt;
+    const sec=Math.ceil(timeLeft);
+    if(timeLeft<10&&timeLeft>0&&sec!==lastTick){lastTick=sec;beep(1200,.04,'square',.025)}
+    if(timeLeft<=0){timeLeft=0;endPeriod(false)}
+  }
+  for(const s of students){
+    s.blinkT-=dt;if(s.blinkT<=0){s.blink=.14;s.blinkT=rand(2,6)}if(s.blink>0)s.blink-=dt;
+    if(s.decoy==='glare'){s.glareT-=dt;if(s.glareT<=0){s.glare=.7;s.glareT=rand(2.5,6)}if(s.glare>0)s.glare-=dt}
+    if(s.caught||s===suedS){s.talk=false;s.px+=(0-s.px)*Math.min(1,dt*6);s.py+=(.9-s.py)*Math.min(1,dt*6);continue}
+    s.modeT-=dt;if(s.modeT<=0)nextMode(s);
+    if(s.penBoost>0)s.penBoost-=dt;
+    if(s.mode==='write')s.pen+=dt*(s.penBoost>0?3.4:1);
+    let tx,ty,snap=false;
+    if(s.mode==='read'){tx=((t*2.6+s.seed)%1)*1.7-.85;ty=.05;snap=true}
+    else if(s.mode==='think'&&s.decoy==='nervous'){tx=Math.sin(t*6.5+s.seed)*.75;ty=-.6;snap=true}
+    else if(s.mode==='think'){tx=s.tx;ty=s.ty}
+    else{tx=Math.sin(t*.8+s.seed)*.25;ty=.85}
+    const r=snap?30:7;
+    s.px+=(tx-s.px)*Math.min(1,dt*r);s.py+=(ty-s.py)*Math.min(1,dt*(snap?12:7));
+    s.talk=(s.isAI&&s.mode==='read')||(s.decoy==='mumble'&&s.mode==='think');
+  }
+  if(suedS){suedT+=dt;suedS.stand=Math.min(1,suedT/.45)}
+}
+
+/* ---------- drawing ---------- */
+function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
+function circle(g,x,y,r){g.beginPath();g.arc(x,y,r,0,TAU);g.fill()}
+function line(g,a,b,cx,d){g.beginPath();g.moveTo(a,b);g.lineTo(cx,d);g.stroke()}
+
+function drawRoom(g){
+  g.fillStyle='#d3cab5';g.fillRect(0,0,W,112);
+  g.fillStyle='#7a5a3c';g.fillRect(0,112,W,H-112);
+  g.strokeStyle='rgba(40,25,10,.18)';g.lineWidth=1;
+  for(let y=136;y<H;y+=26)line(g,0,y,W,y);
+  for(let y=136,i=0;y<H;y+=26,i++)for(let x=(i%2)*90;x<W;x+=180)line(g,x,y,x,y+26);
+  g.fillStyle='#5e4430';g.fillRect(0,108,W,6);
+  // window + light shaft
+  g.fillStyle='rgba(255,248,215,.07)';g.beginPath();g.moveTo(28,112);g.lineTo(198,112);g.lineTo(560,H);g.lineTo(120,H);g.closePath();g.fill();
+  g.fillStyle='#bfe2f2';g.fillRect(28,16,170,76);
+  g.fillStyle='rgba(255,255,255,.55)';g.beginPath();g.moveTo(40,92);g.lineTo(90,16);g.lineTo(110,16);g.lineTo(60,92);g.closePath();g.fill();
+  g.strokeStyle='#8d8778';g.lineWidth=4;g.strokeRect(28,16,170,76);g.lineWidth=3;line(g,113,16,113,92);line(g,28,54,198,54);
+  // blackboard
+  g.fillStyle='#6b4a2b';g.fillRect(244,8,512,94);g.fillStyle='#2d4636';g.fillRect(251,15,498,80);
+  g.fillStyle='rgba(233,239,230,.06)';g.fillRect(260,22,200,6);
+  g.textAlign='center';g.textBaseline='alphabetic';
+  g.fillStyle='#e9efe6';g.font='28px "Do Hyeon", sans-serif';g.fillText('2027학년도 대학수학능력시험',500,50);
+  g.fillStyle='#c6dbc6';g.font='18px "Do Hyeon", sans-serif';g.fillText(L.name+'  ·  전자기기 반입 금지  ·  적발 시 0점 처리',500,80);
+  // clock
+  g.fillStyle='#fbfaf5';g.beginPath();g.arc(890,56,32,0,TAU);g.fill();g.strokeStyle='#2a2a2a';g.lineWidth=4;g.stroke();
+  g.lineWidth=2;for(let i=0;i<12;i++){const a=i/12*TAU;line(g,890+Math.cos(a)*24,56+Math.sin(a)*24,890+Math.cos(a)*28,56+Math.sin(a)*28)}
+  const f=1-timeLeft/L.time,a=-Math.PI/2+f*TAU;
+  g.strokeStyle='#c8322b';g.lineWidth=3;line(g,890,56,890+Math.cos(a)*24,56+Math.sin(a)*24);
+  g.strokeStyle='#222';g.lineWidth=3.5;line(g,890,56,890+Math.cos(-Math.PI/2+f*TAU/12)*15,56+Math.sin(-Math.PI/2+f*TAU/12)*15);
+  g.fillStyle='#222';circle(g,890,56,3);
+  g.textAlign='left';
+}
+function lens(g,s,ex){if(s.frame==='round'){g.beginPath();g.arc(ex,2,6,0,TAU)}else if(s.frame==='square')rr(g,ex-6.3,-2.4,12.6,8.8,2);else rr(g,ex-6.6,-3,13.2,10,3.2)}
+function drawGlasses(g,s,zoom){
+  const reading=s.isAI&&s.mode==='read';
+  for(const sd of[-1,1]){
+    const ex=sd*7.5;
+    lens(g,s,ex);g.fillStyle='rgba(190,220,255,.16)';g.fill();
+    if(zoom&&reading){
+      g.save();lens(g,s,ex);g.clip();
+      g.fillStyle='rgba(60,255,170,.16)';g.fillRect(ex-8,-6,16,16);
+      g.translate(ex,0);g.scale(-1,1);g.fillStyle='rgba(120,255,195,.95)';g.font='bold 2.3px monospace';g.textAlign='center';
+      const off=(t*4)%2.8;
+      for(let i=0;i<6;i++)g.fillText(s.hud[i]||'',0,-2.6+i*2.8-off);
+      g.restore();
+    }
+    if(s.glare>0){
+      g.save();lens(g,s,ex);g.clip();const al=Math.min(1,s.glare/.3);
+      g.strokeStyle='rgba('+s.glareColor+','+al+')';g.lineWidth=2.8;line(g,ex-7,8,ex+5,-5);g.lineWidth=1.1;line(g,ex-2.5,9,ex+7,-1.5);
+      g.restore();
+    }
+    lens(g,s,ex);g.strokeStyle=s.fc;g.lineWidth=s.frame==='thick'?2.4:1.2;g.stroke();
+  }
+  g.strokeStyle=s.fc;g.lineWidth=s.frame==='thick'?1.8:1.1;
+  g.beginPath();g.moveTo(-1.4,1.2);g.quadraticCurveTo(0,-.4,1.4,1.2);g.stroke();
+  const ox=s.frame==='round'?13.5:(s.frame==='square'?13.8:14.1);
+  g.beginPath();g.moveTo(-ox,.6);g.lineTo(-19.6,0);g.moveTo(ox,.6);g.lineTo(19.6,0);g.stroke();
+  const dot=x=>{g.fillStyle='#101318';circle(g,x,.5,.95);g.fillStyle='rgba(150,210,255,.9)';circle(g,x-.3,.2,.32)};
+  if(L.dot){if(s.isAI)dot(-ox-.7)}else{dot(-ox-.7);dot(ox+.7)}
+  if(reading&&s.ledOn&&Math.sin(t*15+s.seed)>-.3){
+    g.save();g.shadowColor='#4ff';g.shadowBlur=zoom?22:9;g.fillStyle='#8ff';circle(g,17,-1.4,zoom?1.1:1.8);g.restore();
+  }
+}
+function drawDesk(g,s,zoom){
+  g.fillStyle='#a8784a';rr(g,-48,28,96,26,3);g.fill();g.fillStyle='#c4935d';g.fillRect(-48,28,96,3);
+  g.save();g.translate(-4,40);g.rotate(-.05);g.fillStyle='#f7f4ea';g.fillRect(-18,-9,36,17);
+  g.strokeStyle='#bdb6a4';g.lineWidth=.5;for(let i=0;i<4;i++)line(g,-15,-6+i*4,13,-6+i*4);
+  if(s.caught){g.strokeStyle='rgba(200,50,43,.8)';g.lineWidth=1.2;line(g,-14,-7,14,7);line(g,14,-7,-14,7)}
+  g.restore();
+  if(s.caught){ // confiscated glasses on desk
+    g.strokeStyle=s.fc;g.lineWidth=1;g.beginPath();g.arc(26,40,3.4,0,TAU);g.stroke();g.beginPath();g.arc(35,40,3.4,0,TAU);g.stroke();
+  }
+  const w=s.mode==='write'&&!s.caught&&s!==suedS,ph=(s.pen*1.2)%1;
+  const hx=w?-13+ph*20:9,hy=w?42+Math.sin(s.pen*38)*.9:41;
+  g.strokeStyle='#e1b23c';g.lineWidth=1.7;g.lineCap='round';line(g,hx,hy,hx+6,hy-8);
+  g.fillStyle='#333';circle(g,hx,hy,.6);
+  g.fillStyle=s.skin;circle(g,hx+2,hy-1,3.8);g.strokeStyle='rgba(0,0,0,.18)';g.lineWidth=.5;g.stroke();
+  if(!zoom){g.fillStyle='rgba(50,30,12,.8)';g.font='bold 7px "Noto Sans KR", sans-serif';g.textAlign='right';g.fillText(String(s.num).padStart(2,'0'),45,51);g.textAlign='left'}
+}
+function drawStudent(g,s,x,y,k,zoom){
+  g.save();g.translate(x,y);g.scale(k,k);
+  g.save();g.translate(0,-12*s.stand);
+  g.fillStyle=s.shirt;rr(g,-28,14,56,44,12);g.fill();
+  g.fillStyle='#f1f1ee';g.beginPath();g.moveTo(-8,15);g.lineTo(0,23);g.lineTo(8,15);g.closePath();g.fill();
+  if(s.hs===2){g.fillStyle=s.hair;rr(g,-22,-10,44,34,10);g.fill()}
+  g.fillStyle=s.skin;g.fillRect(-5,11,10,7);circle(g,-19,2,4);circle(g,19,2,4);
+  g.beginPath();g.ellipse(0,0,19,21,0,0,TAU);g.fill();
+  g.fillStyle=s.hair;g.beginPath();g.ellipse(0,-7,20.5,16,0,Math.PI,TAU);g.closePath();g.fill();
+  if(s.hs===1)g.fillRect(-16,-8,32,2.6);
+  if(s.hs===3)circle(g,0,-25,7);
+  if(s.hs===2){g.fillRect(-21,-8,5,16);g.fillRect(16,-8,5,16)}
+  const raise=(s.mode==='think'||s===suedS)?-1.3:0;
+  g.strokeStyle=s.hair;g.lineWidth=1.4;g.lineCap='round';
+  line(g,-11,-3.4+raise,-4,-4.4+raise);line(g,4,-4.4+raise,11,-3.4+raise);
+  for(const sd of[-1,1]){
+    const ex=sd*7.5,ey=2;
+    if(s.blink>0){g.strokeStyle='#3a2a22';g.lineWidth=1;line(g,ex-3,ey,ex+3,ey)}
+    else{
+      g.fillStyle='#fff';g.beginPath();g.ellipse(ex,ey,3.6,2.6,0,0,TAU);g.fill();
+      const big=s===suedS?.5:0;
+      g.fillStyle='#231915';circle(g,ex+s.px*1.9,ey+s.py*1.05,1.6-big);
+      if(zoom){g.fillStyle='#fff';circle(g,ex+s.px*1.9-.5,ey+s.py*1.05-.5,.45)}
+    }
+  }
+  if(s===suedS){g.fillStyle='#5a2424';g.beginPath();g.ellipse(0,12.5,2.4,3,0,0,TAU);g.fill()}
+  else if(s.talk){g.fillStyle='#7a3434';g.beginPath();g.ellipse(0,12,2.3,.5+Math.abs(Math.sin(t*21+s.seed))*1.4,0,0,TAU);g.fill()}
+  else{g.strokeStyle='#8a4a3e';g.lineWidth=1.1;g.beginPath();g.moveTo(-3,12);g.quadraticCurveTo(0,s.caught?10.4:13,3,12);g.stroke()}
+  if(!s.caught)drawGlasses(g,s,zoom);
+  if(s.caught||s===suedS){g.fillStyle='rgba(120,190,255,.9)';g.beginPath();g.moveTo(15,-14);g.quadraticCurveTo(18,-8,15,-6.5);g.quadraticCurveTo(12,-8,15,-14);g.fill()}
+  g.restore();
+  drawDesk(g,s,zoom);
+  g.restore();
+}
+function stamp(g,x,y){
+  g.save();g.translate(x,y+4);g.rotate(-.25);g.strokeStyle='rgba(200,50,43,.92)';g.lineWidth=3.5;g.beginPath();g.arc(0,0,30,0,TAU);g.stroke();
+  g.lineWidth=1.2;g.beginPath();g.arc(0,0,25,0,TAU);g.stroke();
+  g.fillStyle='rgba(200,50,43,.92)';g.font='22px "Do Hyeon", sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText('적발',0,1);g.restore();
+}
+function missedMark(g,x,y){
+  g.save();g.translate(x,y+4);g.setLineDash([6,5]);g.strokeStyle='#2fd6d0';g.lineWidth=3;g.beginPath();g.arc(0,0,34,0,TAU);g.stroke();g.setLineDash([]);
+  g.fillStyle='#2fd6d0';rr(g,-26,-50,52,20,4);g.fill();g.fillStyle='#0b1a19';g.font='15px "Do Hyeon", sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText('놓침',0,-39.5);g.restore();
+}
+function bubble(g,x,y,text){
+  g.save();g.font='20px "Do Hyeon", sans-serif';const w=g.measureText(text).width+24;
+  g.fillStyle='#fff';rr(g,x-w/2,y-34,w,32,8);g.fill();g.beginPath();g.moveTo(x-6,y-3);g.lineTo(x+6,y-3);g.lineTo(x,y+7);g.closePath();g.fill();
+  g.fillStyle='#1e2320';g.textAlign='center';g.textBaseline='middle';g.fillText(text,x,y-18);g.restore();
+}
+function render(){
+  drawRoom(c);
+  for(const s of students){
+    if(s===hoverS&&state==='play'&&!s.caught){c.fillStyle='rgba(255,240,200,.13)';c.beginPath();c.ellipse(s.x,s.y+22,70,62,0,0,TAU);c.fill()}
+    drawStudent(c,s,s.x,s.y,K,false);
+    if(s.caught)stamp(c,s.x,s.y);
+    if(s.revealed)missedMark(c,s.x,s.y);
+  }
+  if(suedS)bubble(c,suedS.x,suedS.y-44,'제…제가요??');
+}
+function renderZoom(){
+  const g=zc,gr=g.createLinearGradient(0,0,0,ZH);
+  gr.addColorStop(0,'#d8cfbb');gr.addColorStop(.62,'#c4b9a2');gr.addColorStop(.62,'#6a5039');gr.addColorStop(1,'#4d3a29');
+  g.fillStyle=gr;g.fillRect(0,0,ZW,ZH);
+  drawStudent(g,zoomS,ZW/2,158,4.6,true);
+  const v=g.createRadialGradient(ZW/2,ZH/2,ZH*.38,ZW/2,ZH/2,ZH*.85);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.5)');
+  g.fillStyle=v;g.fillRect(0,0,ZW,ZH);
+  $('zTime').textContent='남은 시간 '+fmt(timeLeft);
+}
+function updateBar(){
+  $('bPeriod').textContent=L.name;
+  const bt=$('bTime');bt.textContent=fmt(timeLeft);bt.classList.toggle('low',timeLeft<10&&(state==='play'||state==='zoom'));
+  $('bCaught').textContent=caughtThis+' / '+L.ai;
+  $('bScore').textContent=score;
+}
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  update(dt);render();if(state==='zoom'&&zoomS)renderZoom();updateBar();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- input ---------- */
+function hit(e){
+  const r=cv.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+  for(const s of students){const dx=x-s.x,dy=y-s.y;if(Math.abs(dx)<64&&dy>-38&&dy<74)return s}
+  return null;
+}
+cv.addEventListener('pointermove',e=>{hoverS=hit(e);cv.style.cursor=hoverS&&state==='play'&&!hoverS.caught?'zoom-in':'default'});
+cv.addEventListener('pointerleave',()=>{hoverS=null});
+cv.addEventListener('pointerdown',e=>{if(state!=='play')return;const s=hit(e);if(s&&!s.caught)openZoom(s)});
+function openZoom(s){
+  zoomS=s;state='zoom';
+  $('zTitle').textContent='수험번호 '+String(s.num).padStart(2,'0')+'번 관찰 중';
+  $('zoomOv').hidden=false;renderZoom();$('closeBtn').focus();
+}
+function closeZoom(){$('zoomOv').hidden=true;if(state==='zoom')state='play';zoomS=null}
+$('closeBtn').onclick=closeZoom;
+$('accuseBtn').onclick=()=>{if(state!=='zoom'||!zoomS)return;const s=zoomS;closeZoom();if(s.isAI)catchS(s);else sue(s)};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state==='zoom')closeZoom()});
+$('muteBtn').onclick=()=>{muted=!muted;$('muteBtn').textContent=muted?'소리 꺼짐':'소리 켜짐'};
+
+let toastTimer=0;
+function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('on'),1600)}
+
+/* ---------- game flow ---------- */
+function catchS(s){
+  s.caught=true;s.mode='caught';caughtThis++;totalCaught++;
+  const gain=100+Math.floor(timeLeft);score+=gain;
+  toast('적발! 「'+s.brand+'」 압수 +'+gain);sCatch();
+  if(caughtThis===L.ai)setTimeout(()=>endPeriod(true),900);
+}
+function sue(s){
+  state='sued';suedS=s;suedT=0;sWrong();
+  const st=$('stage');st.classList.remove('shake');void st.offsetWidth;st.classList.add('shake');
+  setTimeout(()=>showJail(s),1800);
+}
+function show(html,cls){const ov=$('ov');ov.className='overlay'+(cls?' '+cls:'');ov.innerHTML=html;ov.hidden=false;const b=ov.querySelector('button');if(b)b.focus()}
+function hide(){$('ov').hidden=true}
+
+function showIntro(){
+  state='intro';
+  show(`<div class="card">
+    <div class="sheet-head"><span>2027학년도 대학수학능력시험</span><span>감독관 지침서</span></div>
+    <h1>AI 안경 감독관</h1>
+    <p>올해 수능장에 정답을 속삭여 주는 AI 안경이 퍼졌습니다. 당신은 3교시 동안 이 교실을 맡은 감독관입니다. 잡으면 표창, 잘못 잡으면 고소입니다.</p>
+    <ul class="rules">
+      <li><b>학생을 누르면</b> 확대해서 관찰합니다. 관찰하는 동안에도 시간은 흐릅니다.</li>
+      <li><b>AI 안경이 확실하면</b> 적발. 한 명당 100점에 남은 초만큼 보너스.</li>
+      <li><b>평범한 안경을 잡으면</b> 그 자리에서 고소당하고 징역 엔딩입니다.</li>
+      <li><b>놓친 AI 안경</b>이 많으면 감사에 걸려 해임됩니다.</li>
+    </ul>
+    <div class="clues"><span class="chip ai">파란 LED</span><span class="chip ai">좌우로 훑는 눈</span><span class="chip ai">속삭이는 입</span><span class="chip ai">갑자기 빨라지는 필기</span><span class="chip ai">렌즈의 거울 글씨</span><span class="chip">창문 반사는 무죄</span></div>
+    <div class="row"><button class="btn" id="goBtn" type="button">감독 시작</button></div>
+    <div class="sign">감독관 확인 ________ (인)</div>
+  </div>`);
+  $('goBtn').onclick=()=>{ac();lv=0;score=0;totalMissed=0;totalCaught=0;showPeriodIntro()};
+}
+function showPeriodIntro(){
+  L=LEVELS[lv];makeStudents();timeLeft=L.time;caughtThis=0;lastTick=0;suedS=null;state='periodIntro';
+  $('note').textContent=L.note;
+  show(`<div class="card">
+    <div class="sheet-head"><span>제 ${lv+1} 교시</span><span>${L.subj} 영역 · ${L.time}초</span></div>
+    <div class="big">${L.name}</div>
+    <p><b>제보:</b> 이 교실에 AI 안경을 쓴 수험생이 <b>${L.ai}명</b> 있습니다.</p>
+    <div class="tip">${L.tip}</div>
+    <div class="row"><button class="btn" id="goBtn" type="button">시험 시작</button></div>
+  </div>`);
+  $('goBtn').onclick=()=>{hide();state='play';sBell()};
+}
+function endPeriod(all){
+  if(state!=='play'&&state!=='zoom')return;
+  $('zoomOv').hidden=true;zoomS=null;
+  const missed=L.ai-caughtThis;totalMissed+=missed;
+  let bonus=0;if(all){bonus=Math.floor(timeLeft)*5;score+=bonus}
+  for(const s of students)if(s.isAI&&!s.caught)s.revealed=true;
+  state='result';sBell();
+  setTimeout(()=>{
+    const lastLv=lv===LEVELS.length-1;
+    show(`<div class="card">
+      <div class="sheet-head"><span>${L.name} 종료</span><span>${all?'전원 적발':'시간 종료'}</span></div>
+      <h2>${all?'싹 다 잡았습니다':(missed?missed+'명을 놓쳤습니다':'끝까지 버텼습니다')}</h2>
+      <div class="stats">
+        <div class="stat"><span>적발</span><b>${caughtThis}</b></div>
+        <div class="stat"><span>놓침</span><b>${missed}</b></div>
+        <div class="stat"><span>점수</span><b>${score}</b></div>
+      </div>
+      <p>${all?'남은 시간 보너스 +'+bonus+'점.':(missed?'교실에 하늘색으로 표시된 학생이 놓친 AI 안경입니다.':'')}</p>
+      <div class="row"><button class="btn" id="goBtn" type="button">${lastLv?'결과 확인':'다음 교시'}</button><button class="btn ghost" id="lookBtn" type="button">교실 보기</button></div>
+    </div>`);
+    $('goBtn').onclick=()=>{if(lastLv)showFinal();else{lv++;showPeriodIntro()}};
+    $('lookBtn').onclick=()=>{hide();peek()};
+  },all?400:900);
+}
+function peek(){ // let the player look at the room, tap anywhere to come back
+  const back=()=>{document.removeEventListener('pointerdown',back,true);$('ov').hidden=false;const b=$('ov').querySelector('button');if(b)b.focus()};
+  setTimeout(()=>document.addEventListener('pointerdown',back,true),50);
+  toast('아무 곳이나 누르면 돌아갑니다');
+}
+function showFinal(){
+  const total=LEVELS.reduce((a,l)=>a+l.ai,0);
+  let tag,title,body;
+  if(totalMissed===0){tag='진 엔딩';title='전설의 감독관';body=`AI 안경 ${total}개 전부 압수, 오심 0건. 교육청은 당신의 이름을 딴 「AI 안경 판별 매뉴얼」을 발간했고, 내년부터 전국 감독관 연수 강사로 불려 다니게 되었습니다.`}
+  else if(totalMissed<=3){tag='노말 엔딩';title='무난한 감독관';body=`${total}개 중 ${totalCaught}개를 잡았습니다. 놓친 ${totalMissed}명은 나중에 다른 시험장에서 걸렸다는 소문이 돕니다. 아무도 당신을 탓하지 않았고, 아무도 당신을 기억하지 않습니다.`}
+  else{tag='해임 엔딩';title='감사에 걸렸습니다';body=`놓친 AI 안경 ${totalMissed}개. 그해 이 교실에서만 영어 만점자가 ${totalMissed+3}명 나왔고, 감사 결과 "감독관이 학생 얼굴을 한 번도 제대로 보지 않았다"는 결론이 났습니다. 징계위원회 출석 요구서가 집으로 날아왔습니다.`}
+  state='ending';
+  show(`<div class="card">
+    <div class="sheet-head"><span>2027학년도 수능 감독 결과</span><span>${tag}</span></div>
+    <div class="ending-tag">${tag}</div>
+    <h1>${title}</h1>
+    <p>${body}</p>
+    <div class="stats">
+      <div class="stat"><span>총 적발</span><b>${totalCaught}/${total}</b></div>
+      <div class="stat"><span>놓침</span><b>${totalMissed}</b></div>
+      <div class="stat"><span>최종 점수</span><b>${score}</b></div>
+    </div>
+    <div class="row"><button class="btn" id="goBtn" type="button">다시 감독하기</button></div>
+  </div>`);
+  $('goBtn').onclick=showIntro;
+}
+function showJail(s){
+  const years=1+Math.floor(Math.random()*3),money=pick(['3천만','5천만','8천만','1억']);
+  const no=String(s.num).padStart(2,'0'),caseNo='2027고단'+Math.floor(rand(1000,9999));
+  const R={
+    none:['할머니가 생신 선물로 사 준 3만9천 원짜리 평범한 안경','이거 할머니가 사 주신 건데요… 블루투스도 안 돼요…'],
+    glare:['창문 햇빛이 렌즈에 반사되었을 뿐인 평범한 안경','창문에서 햇빛 들어온 건데요…'],
+    clock:['시계를 보느라 고개를 돌렸을 뿐인 학생의 평범한 안경','시간 확인한 건데요… 시간이 없어서요…'],
+    mumble:['긴장하면 혼잣말을 하는 습관이 있는 학생의 평범한 안경','저 원래 혼잣말해요… 중학교 때부터요…'],
+    nervous:['고민하며 눈을 굴렸을 뿐인 학생의 평범한 안경','고민할 때 눈 굴리는 것도 죄예요?']
+  }[s.decoy]||['평범한 안경','네…?'];
+  state='ending';
+  show(`<div class="card verdict">
+    <div class="ending-tag" style="text-align:center">징역 엔딩</div>
+    <div class="court">서 울 중 앙 지 방 법 원</div>
+    <h2>판결</h2>
+    <dl>
+      <dt>사건</dt><dd>${caseNo} 명예훼손, 업무방해</dd>
+      <dt>피고인</dt><dd>수능 감독관 (당신)</dd>
+      <dt>피해자</dt><dd>수험번호 ${no}번 수험생</dd>
+    </dl>
+    <h3>주문</h3>
+    <p class="sentence">피고인을 징역 ${years}년에 처한다.<br>피해자에게 위자료 ${money} 원을 지급하라.</p>
+    <h3>이유</h3>
+    <p>피고인은 ${esc(L.name)} 시험 중 수험번호 ${no}번 수험생의 안경을 "AI 안경"이라 단정하고 시험지를 압수하였다. 감정 결과 해당 안경은 ${esc(R[0])}으로, 전자 부품은 나사 한 개도 발견되지 않았다. 피해자는 남은 교시를 울면서 응시하였고, 학부모는 다음 날 아침 변호사 세 명을 선임하였다. 피고인은 법정에서 "눈빛이 수상했다"고 진술하였으나 받아들여지지 않았다.</p>
+    <div class="quote">수험생 ${no}번: "${esc(R[1])}"</div>
+    <div class="seal">판사<br>직인</div>
+    <div class="row"><button class="btn" id="goBtn" type="button">다시 감독하기</button></div>
+    <div class="fine">이 판결은 게임 속 이야기입니다. 그래도 실제 시험장에서는 확실할 때만 잡으세요. 이번 판 점수 ${score}점.</div>
+  </div>`,'jail');
+  $('goBtn').onclick=showIntro;
+}
+
+makeStudents();
+showIntro();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
