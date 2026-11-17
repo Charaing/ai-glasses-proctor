@@ -615,7 +615,7 @@ requestAnimationFrame(frame);
 <style>
 /* 수험표 */
 .cz-ov{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(8,13,11,.6);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);padding:16px}
-.cz-card{background:var(--paper);color:var(--ink);border-radius:22px;width:100%;max-width:360px;padding:22px 20px 18px;font-family:var(--f-ui);font-size:14px;line-height:1.55;
+.cz-card{background:var(--paper);color:var(--ink);border-radius:22px;width:100%;max-width:400px;padding:22px 20px 18px;font-family:var(--f-ui);font-size:14px;line-height:1.55;
   box-shadow:0 1px 0 rgba(255,255,255,.8) inset,0 40px 90px -24px rgba(0,0,0,.75);animation:czIn .26s cubic-bezier(.2,.8,.2,1)}
 @keyframes czIn{from{opacity:0;transform:translateY(14px) scale(.98)}}
 .cz-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--omr-line)}
@@ -625,7 +625,15 @@ requestAnimationFrame(frame);
 .cz-grid{display:grid;grid-template-columns:72px 1fr;border:1px solid var(--omr-line);border-radius:12px;overflow:hidden}
 .cz-grid>label{display:flex;align-items:center;padding:0 12px;background:#FBEFF1;color:#9B3346;font-size:13px;font-weight:600}
 .cz-grid>div{padding:6px 8px}
-.cz-grid>label:nth-of-type(2),.cz-grid>div:nth-of-type(2){border-top:1px solid var(--omr-line)}
+.cz-grid>label:nth-of-type(n+2),.cz-grid>div:nth-of-type(n+2){border-top:1px solid var(--omr-line)}
+.cz-grid>label.top{align-items:flex-start;padding-top:12px}
+.cz-sig{position:relative;height:96px;border-radius:9px;background:#F2F3F1;touch-action:none}
+.cz-sig canvas{width:100%;height:100%;display:block;cursor:crosshair;border-radius:9px}
+.cz-sig .ph{position:absolute;inset:0;display:grid;place-items:center;color:#9AA0A6;font-size:13px;pointer-events:none}
+.cz-sig .clr{position:absolute;right:6px;bottom:6px;border:0;background:rgba(255,255,255,.9);color:var(--ink-2);font-size:11.5px;font-weight:600;padding:4px 8px;border-radius:7px;cursor:pointer;display:none}
+.cz-sig.inked .ph{display:none}
+.cz-sig.inked .clr{display:block}
+.cz-list img{height:30px;display:block}
 .cz-in{width:100%;font:inherit;font-size:16px;font-weight:600;padding:8px 6px;border:0;background:transparent;color:var(--ink);border-radius:8px}
 .cz-in::placeholder{color:#A9AEB4;font-weight:500}
 .cz-in:focus,.cz-sel:focus{outline:2px solid var(--ai);outline-offset:0}
@@ -675,11 +683,12 @@ requestAnimationFrame(frame);
           <select class="cz-sel empty" id="czM" aria-label="태어난 달">${opts(1,12,'월','월')}</select>
           <select class="cz-sel empty" id="czD" aria-label="태어난 날">${opts(1,31,'일','일')}</select>
         </div>
+        <label class="top">서명</label><div><div class="cz-sig" id="czSig"><canvas aria-label="서명 칸. 손가락이나 마우스로 서명"></canvas><span class="ph">여기에 서명</span><button class="clr" type="button">지우기</button></div></div>
       </div>
       <label class="cz-ck"><input type="checkbox" id="czChk"><span class="cz-box"><svg viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5l2.5 2.5L11 4.5"/></svg></span><span>이용약관 전문(제1조~제24조, 제3장 당사자 간 특약 포함)을 읽고 동의합니다.</span></label>
       <button class="btn" id="czGo" type="button">동의하고 입실하기</button>
       <div class="cz-err" id="czErr" role="alert"></div>
-      <div class="cz-tiny">입력한 성명과 생년월일은 동의 기록으로 운영자에게 저장됩니다. (약관 제15조)</div>`);
+      <div class="cz-tiny">입력한 성명, 생년월일, 서명은 동의 기록으로 운영자에게 저장됩니다. (약관 제15조)</div>`);
     const $o=s=>o.querySelector(s);
     const yS=$o('#czY'),mS=$o('#czM'),dS=$o('#czD');
     function fixDays(){
@@ -688,16 +697,26 @@ requestAnimationFrame(frame);
       [yS,mS,dS].forEach(s=>s.classList.toggle('empty',!s.value));
     }
     [yS,mS,dS].forEach(s=>s.addEventListener('change',fixDays));
+    const box=$o('#czSig'),sc=box.querySelector('canvas'),sx=sc.getContext('2d');let inked=false,drawing=false,lp=null;
+    function sizeSig(){const r=sc.getBoundingClientRect(),dp=Math.min(2,window.devicePixelRatio||1);sc.width=r.width*dp;sc.height=r.height*dp;sx.setTransform(dp,0,0,dp,0,0);sx.lineWidth=2.4;sx.lineCap='round';sx.lineJoin='round';sx.strokeStyle='#1C1F24'}
+    requestAnimationFrame(sizeSig);
+    const sp=e=>{const r=sc.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}};
+    sc.addEventListener('pointerdown',e=>{drawing=true;lp=sp(e);sc.setPointerCapture(e.pointerId)});
+    sc.addEventListener('pointermove',e=>{if(!drawing)return;const p=sp(e);sx.beginPath();sx.moveTo(lp.x,lp.y);sx.lineTo(p.x,p.y);sx.stroke();lp=p;if(!inked){inked=true;box.classList.add('inked')}});
+    ['pointerup','pointercancel'].forEach(t=>sc.addEventListener(t,()=>drawing=false));
+    box.querySelector('.clr').onclick=()=>{sx.clearRect(0,0,sc.width,sc.height);inked=false;box.classList.remove('inked')};
+    function sigData(){const r=sc.getBoundingClientRect(),t=document.createElement('canvas');t.width=Math.round(r.width);t.height=Math.round(r.height);t.getContext('2d').drawImage(sc,0,0,t.width,t.height);return t.toDataURL('image/png')}
     $o('#czName').focus({preventScroll:true});
     $o('#czGo').onclick=async()=>{
       const name=$o('#czName').value.trim(),err=$o('#czErr'),btn=$o('#czGo');
       if(!name){err.textContent='성명을 입력하세요.';return $o('#czName').focus()}
       if(!yS.value||!mS.value||!dS.value){err.textContent='생년월일을 모두 선택하세요.';return (!yS.value?yS:!mS.value?mS:dS).focus()}
+      if(!inked)return err.textContent='서명 칸에 서명하세요.';
       if(!$o('#czChk').checked)return err.textContent='약관에 동의해야 입실할 수 있습니다.';
       const p=n=>String(n).padStart(2,'0'),birth=`${yS.value}-${p(mS.value)}-${p(dS.value)}`;
       err.textContent='';btn.disabled=true;btn.textContent='저장하는 중…';
       try{
-        const r=await fetch(API+'/sign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,birth,terms:'v2026.11.17'})});
+        const r=await fetch(API+'/sign',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,birth,sig:sigData(),terms:'v2026.11.17'})});
         if(!r.ok)throw 0;
       }catch(e){btn.disabled=false;btn.textContent='동의하고 입실하기';return err.textContent='저장하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.'}
       try{localStorage.setItem(KEY,'1')}catch(e){}
@@ -729,8 +748,8 @@ requestAnimationFrame(frame);
         const r=await fetch(API+'/list',{headers:{'X-Admin-Key':o.querySelector('#czKey').value}});
         if(r.status===401)return err.textContent='비밀번호가 맞지 않습니다.';
         const d=await r.json();err.textContent=d.count?'':'아직 동의한 사람이 없습니다.';
-        o.querySelector('#czList').innerHTML=d.count?'<div class="cz-list"><table><tr><th>성명</th><th>생년월일</th><th>동의 일시</th></tr>'+
-          d.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${esc(i.birth)}</td><td>${esc(new Date(i.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}))}</td></tr>`).join('')+'</table></div>':'';
+        o.querySelector('#czList').innerHTML=d.count?'<div class="cz-list"><table><tr><th>성명</th><th>생년월일</th><th>서명</th><th>동의 일시</th></tr>'+
+          d.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${esc(i.birth)}</td><td>${(i.sig||'').startsWith('data:image/png;base64,')&&/^[A-Za-z0-9+\/=]+$/.test(i.sig.slice(22))?'<img alt="서명" src="'+i.sig+'">':'-'}</td><td>${esc(new Date(i.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}))}</td></tr>`).join('')+'</table></div>':'';
       }catch(e){err.textContent='명부를 불러오지 못했습니다. 다시 시도해 주세요.'}
     };
   }
