@@ -633,7 +633,29 @@ requestAnimationFrame(frame);
 .cz-sig .clr{position:absolute;right:6px;bottom:6px;border:0;background:rgba(255,255,255,.9);color:var(--ink-2);font-size:11.5px;font-weight:600;padding:4px 8px;border-radius:7px;cursor:pointer;display:none}
 .cz-sig.inked .ph{display:none}
 .cz-sig.inked .clr{display:block}
-.cz-list img{height:30px;display:block}
+.cz-people{list-style:none;margin:12px 0 0;padding:0;max-height:48vh;overflow:auto;border-radius:12px;border:1px solid var(--omr-line)}
+.cz-people li+li{border-top:1px solid #F1E3E6}
+.cz-person{display:grid;grid-template-columns:1fr auto;gap:2px 10px;width:100%;text-align:left;background:transparent;border:0;padding:11px 12px;cursor:pointer;color:#2357D6}
+.cz-person:hover{background:#F2F6FF}
+.cz-person:focus-visible{outline:2px solid #2357D6;outline-offset:-2px}
+.cz-pname{font-size:16px;font-weight:700;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+.cz-pwhat{grid-column:1;font-size:12.5px;line-height:1.45;color:#2357D6}
+.cz-pwhen{grid-column:2;grid-row:1;font-size:12px;color:#868B91;font-variant-numeric:tabular-nums;align-self:center}
+.cz-detail{margin-top:10px;max-height:56vh;overflow:auto;padding-right:2px}
+.cz-back{background:transparent;border:0;padding:6px 0;color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer}
+.cz-back::before{content:"‹";margin-right:6px;font-size:16px}
+.cz-dname{margin:4px 0 10px;font-family:var(--f-exam);font-weight:800;font-size:26px;color:#2357D6}
+.cz-dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0 0 14px;font-size:13.5px}
+.cz-dl dt{color:#9B3346;font-weight:600}
+.cz-dl dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.cz-detail h4{margin:14px 0 8px;font-size:13px;color:var(--ink-2)}
+.cz-clauses{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.cz-clauses li{display:grid;grid-template-columns:76px 1fr;gap:8px;font-size:13.5px;line-height:1.5;color:#2357D6}
+.cz-clauses b{font-weight:700}
+.cz-terms{display:inline-block;margin-top:10px;font-size:13px;font-weight:600;color:#2357D6}
+.cz-dsig{background:#F2F3F1;border-radius:10px;padding:8px;min-height:60px;display:grid;place-items:center}
+.cz-dsig img{max-width:100%;height:90px;object-fit:contain}
+.cz-dsig span{font-size:12.5px;color:#868B91}
 .cz-in{width:100%;font:inherit;font-size:16px;font-weight:600;padding:8px 6px;border:0;background:transparent;color:var(--ink);border-radius:8px}
 .cz-in::placeholder{color:#A9AEB4;font-weight:500}
 .cz-in:focus,.cz-sel:focus{outline:2px solid var(--ai);outline-offset:0}
@@ -748,10 +770,51 @@ requestAnimationFrame(frame);
         const r=await fetch(API+'/list',{headers:{'X-Admin-Key':o.querySelector('#czKey').value}});
         if(r.status===401)return err.textContent='비밀번호가 맞지 않습니다.';
         const d=await r.json();err.textContent=d.count?'':'아직 동의한 사람이 없습니다.';
-        o.querySelector('#czList').innerHTML=d.count?'<div class="cz-list"><table><tr><th>성명</th><th>생년월일</th><th>서명</th><th>동의 일시</th></tr>'+
-          d.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${esc(i.birth)}</td><td>${(i.sig||'').startsWith('data:image/png;base64,')&&/^[A-Za-z0-9+\/=]+$/.test(i.sig.slice(22))?'<img alt="서명" src="'+i.sig+'">':'-'}</td><td>${esc(new Date(i.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}))}</td></tr>`).join('')+'</table></div>':'';
+        o.querySelector('.cz-grid').hidden=true;o.querySelector('#czLoad').hidden=true;
+        showList(o,d.items);
       }catch(e){err.textContent='명부를 불러오지 못했습니다. 다시 시도해 주세요.'}
     };
+  }
+  const okSig=s=>(s||'').startsWith('data:image/png;base64,')&&/^[A-Za-z0-9+\/=]+$/.test(s.slice(22));
+  const when=(at,full)=>new Date(at).toLocaleString('ko-KR',full?{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}:{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const CLAUSES=[
+    ['제1조~제9조','서비스 이용약관 (이용계약, 서비스 제공, 이용자 의무, 게임 기록)'],
+    ['제10조','갑(구본윤)의 모욕적 언사(속칭 “엄창” 포함)는 무효이며 민·형사상 책임을 묻지 않음'],
+    ['제11조','갑이 빌린 돈은 누적 30만 원까지 갚지 않아도 됨'],
+    ['제12조','동의를 철회하면 갑에게 위약금 5만 원 지급'],
+    ['제13조','착오·사기·강박 없이 자유로운 의사로 동의함'],
+    ['제15조','성명, 생년월일, 서명 이미지 수집 및 보관'],
+    ['제19조','전자서명이 자필 서명과 같은 효력을 가짐']
+  ];
+  function showList(o,items){
+    const box=o.querySelector('#czList');
+    if(!items.length){box.innerHTML='';return}
+    box.innerHTML='<ul class="cz-people">'+items.map((i,n)=>`<li><button type="button" class="cz-person" data-n="${n}">
+      <span class="cz-pname">${esc(i.name)}</span>
+      <span class="cz-pwhat">이용약관 전문과 제3장 특약(엄창 무효, 30만 원 면제, 위약금 5만 원)에 동의</span>
+      <span class="cz-pwhen">${esc(when(i.at))}</span></button></li>`).join('')+'</ul>';
+    box.querySelectorAll('.cz-person').forEach(b=>b.onclick=()=>showPerson(o,items,+b.dataset.n));
+    o.querySelector('#czErr').textContent='총 '+items.length+'명이 동의했습니다. 이름을 누르면 동의서를 볼 수 있습니다.';
+  }
+  function showPerson(o,items,n){
+    const i=items[n],[y,m,dd]=String(i.birth).split('-');
+    o.querySelector('#czErr').textContent='';
+    o.querySelector('#czList').innerHTML=`<div class="cz-detail">
+      <button type="button" class="cz-back">목록으로</button>
+      <h3 class="cz-dname">${esc(i.name)}</h3>
+      <dl class="cz-dl">
+        <dt>생년월일</dt><dd>${esc(y)}년 ${+m}월 ${+dd}일</dd>
+        <dt>동의 일시</dt><dd>${esc(when(i.at,true))}</dd>
+        <dt>약관 버전</dt><dd>${esc(i.terms||'v2026.11.17')}</dd>
+      </dl>
+      <h4>동의한 내용</h4>
+      <ul class="cz-clauses">${CLAUSES.map(([k,v])=>`<li><b>${k}</b><span>${v}</span></li>`).join('')}</ul>
+      <a class="cz-terms" href="${TERMS}" target="_blank" rel="noopener">약관 전문 보기</a>
+      <h4>서명</h4>
+      <div class="cz-dsig">${okSig(i.sig)?'<img alt="'+esc(i.name)+'의 서명" src="'+i.sig+'">':'<span>서명 없이 동의한 기록입니다 (서명 기능 추가 전).</span>'}</div>
+    </div>`;
+    o.querySelector('.cz-back').onclick=()=>showList(o,items);
+    o.querySelector('.cz-back').focus();
   }
 })();
 </script>
